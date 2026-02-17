@@ -21,6 +21,16 @@ pub fn calculate_stats(messages: &[TranscriptMessage]) -> Option<SessionStats> {
         .map(|u| u.output_tokens)
         .sum();
 
+    let total_cache_creation: u64 = messages.iter()
+        .filter_map(|m| m.usage.as_ref())
+        .map(|u| u.cache_creation_input_tokens.unwrap_or(0))
+        .sum();
+
+    let total_cache_read: u64 = messages.iter()
+        .filter_map(|m| m.usage.as_ref())
+        .map(|u| u.cache_read_input_tokens.unwrap_or(0))
+        .sum();
+
     let blocks = detect_blocks(messages);
     let current_block = blocks.last()?;
 
@@ -34,5 +44,50 @@ pub fn calculate_stats(messages: &[TranscriptMessage]) -> Option<SessionStats> {
         block_start: Some(current_block.start),
         block_end: Some(current_block.end),
         burn_timeline,
+        total_cache_creation,
+        total_cache_read,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tokens::TokenUsage;
+
+    #[test]
+    fn test_sum_cache_creation_tokens() {
+        // Test that cache creation tokens are summed correctly
+        let usages = vec![
+            (Some(25u64), Some(10u64)),
+            (Some(15u64), None),
+            (None, Some(5u64)),
+        ];
+        let total_cache_creation = usages.iter()
+            .map(|(cc, _)| cc.unwrap_or(0))
+            .sum::<u64>();
+        let total_cache_read = usages.iter()
+            .map(|(_, cr)| cr.unwrap_or(0))
+            .sum::<u64>();
+
+        assert_eq!(total_cache_creation, 40); // 25 + 15
+        assert_eq!(total_cache_read, 15);     // 10 + 5
+    }
+
+    #[test]
+    fn test_empty_cache_tokens() {
+        // Test that cache tokens default to 0 when None
+        let usages = vec![
+            (None, None),
+            (None, None),
+        ];
+        let total_cache_creation = usages.iter()
+            .map(|(cc, _)| cc.unwrap_or(0))
+            .sum::<u64>();
+        let total_cache_read = usages.iter()
+            .map(|(_, cr)| cr.unwrap_or(0))
+            .sum::<u64>();
+
+        assert_eq!(total_cache_creation, 0);
+        assert_eq!(total_cache_read, 0);
+    }
 }
