@@ -19,9 +19,18 @@ pub fn get_dirty_status(cwd: Option<&str>) -> Option<String> {
         .ok()?;
 
     if !output.status.success() || output.stdout.is_empty() {
-        None
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let modified_count = stdout.lines()
+        .filter(|line| line.starts_with(" M") || line.starts_with("M "))
+        .count();
+
+    if modified_count > 0 {
+        Some(format!("M{}", modified_count))
     } else {
-        Some("*".to_string())
+        Some(format!("+{}", stdout.lines().count()))
     }
 }
 
@@ -58,4 +67,39 @@ fn read_git_status(cwd: &str) -> Option<String> {
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_dirty_status_with_modified_files() {
+        // Test parsing git status output with modified files
+        let status_output = " M file1.rs\n M file2.rs\nM  file3.rs\n";
+        let modified_count = parse_modified_count(status_output);
+        assert_eq!(modified_count, 3);
+    }
+
+    #[test]
+    fn test_parse_dirty_status_with_no_modified() {
+        // Test parsing git status output with no modified files
+        let status_output = "?? file.rs\n";
+        let modified_count = parse_modified_count(status_output);
+        assert_eq!(modified_count, 0);
+    }
+
+    #[test]
+    fn test_parse_dirty_status_empty() {
+        // Test parsing empty status output
+        let status_output = "";
+        let modified_count = parse_modified_count(status_output);
+        assert_eq!(modified_count, 0);
+    }
+
+    fn parse_modified_count(output: &str) -> usize {
+        output.lines()
+            .filter(|line| line.starts_with(" M") || line.starts_with("M "))
+            .count()
+    }
 }
