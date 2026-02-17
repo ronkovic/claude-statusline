@@ -2,7 +2,7 @@
 use serde::Deserialize;
 use std::io::{self, Read};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 pub struct StdinData {
     pub model: Option<ModelInfo>,
     pub cwd: Option<String>,
