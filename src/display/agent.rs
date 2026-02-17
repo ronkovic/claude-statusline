@@ -1,0 +1,9 @@
+// Agent Teams display mode
+// Wave 2: agent-formatter implementation
+
+use super::DisplayContext;
+
+pub fn render(_ctx: &DisplayContext) -> String {
+    // Stub
+    String::new()
+}
