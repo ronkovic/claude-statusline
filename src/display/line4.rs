@@ -1,9 +1,16 @@
-// Line 4: Burn timeline sparkline and rate
-// Wave 2: agent-formatter implementation
-
 use super::DisplayContext;
+use crate::display::progress::render_sparkline;
+use crate::display::format::format_tokens;
+use crate::colors::*;
 
-pub fn render(_ctx: &DisplayContext, _width: usize) -> String {
-    // Stub
-    String::new()
+pub fn render(ctx: &DisplayContext, _width: usize) -> String {
+    if let Some(stats) = &ctx.stats {
+        let sparkline = render_sparkline(&stats.burn_timeline);
+        let total: u64 = stats.burn_timeline.iter().sum();
+        let rate = format_tokens(total / 20);
+
+        format!("{} {}/15min", c(YELLOW, &sparkline), c(DIM, &rate))
+    } else {
+        String::new()
+    }
 }
