@@ -1,88 +1,193 @@
 use super::DisplayContext;
-use crate::display::{width::*, format::*};
+use crate::display::format::format_cost_ref;
+use crate::display::width::strip_ansi;
 use crate::colors::*;
-use crate::tokens::{calculate_cost, TokenUsage};
+use crate::git::get_dirty_status;
 
 pub fn render(ctx: &DisplayContext, width: usize) -> String {
-    let model = ctx.stdin_data.model_display();
-    let git = format_git(ctx);
-    let dir = format_dir(ctx);
-    let msgs = format_messages(ctx);
-    let cost = format_cost_info(ctx);
+    let model = ctx.stdin_data.model.as_ref().map(|m| {
+        m.display_name.as_ref()
+            .or(m.id.as_ref())
+            .map(|n| shorten_model(n))
+            .unwrap_or_default()
+    });
 
-    for stage in 0..6 {
-        let line = build_line(model, &git, &dir, &msgs, &cost, stage);
-        if display_width(&line) <= width {
-            return line;
-        }
-    }
+    let git_branch = ctx.git_branch.as_deref();
+    let dirty = get_dirty_status(None).unwrap_or_default();
 
-    truncate_to_width(&build_line(model, &git, &dir, &msgs, &cost, 5), width)
-}
-
-fn build_line(model: &str, git: &str, dir: &str, msgs: &str, cost: &str, stage: usize) -> String {
-    let parts: Vec<&str> = match stage {
-        0 => vec![model, git, dir, msgs, cost].into_iter().filter(|s| !s.is_empty()).collect(),
-        1 => vec![shorten_model(model), git, dir, cost].into_iter().filter(|s| !s.is_empty()).collect(),
-        2 => vec![shorten_model(model), git, cost].into_iter().filter(|s| !s.is_empty()).collect(),
-        3 => vec![shorten_model(model), git].into_iter().filter(|s| !s.is_empty()).collect(),
-        4 => vec![shorten_model(model), cost].into_iter().filter(|s| !s.is_empty()).collect(),
-        _ => vec![shorten_model(model)],
-    };
-    parts.join(" ")
-}
-
-fn format_git(ctx: &DisplayContext) -> String {
-    if let Some(branch) = &ctx.git_branch {
-        let dirty = ctx.git_dirty.as_deref().unwrap_or("");
-        c(CYAN, &format!("git:{}{}", branch, dirty))
-    } else {
-        String::new()
-    }
-}
-
-fn format_dir(ctx: &DisplayContext) -> String {
     let dir = ctx.stdin_data.cwd.as_deref()
-        .or_else(|| ctx.stdin_data.workspace.as_ref().and_then(|w| w.current_dir.as_deref()));
+        .or_else(|| ctx.stdin_data.workspace.as_ref()
+            .and_then(|w| w.current_dir.as_deref()))
+        .and_then(|path| path.split('/').last());
 
-    dir.map(|cwd| {
-        let short = cwd.split('/').last().unwrap_or(cwd);
-        c(BLUE, short)
-    }).unwrap_or_default()
-}
+    let msg_count = ctx.stats.as_ref().map(|s| s.message_count);
 
-fn format_messages(ctx: &DisplayContext) -> String {
-    if let Some(stats) = &ctx.stats {
-        c(GREEN, &format!("{}msg", stats.message_count))
-    } else {
-        String::new()
-    }
-}
+    let cost = ctx.stdin_data.cost.as_ref()
+        .and_then(|c| c.total_cost_usd)
+        .map(|c| format_cost_ref(c));
 
-fn format_cost_info(ctx: &DisplayContext) -> String {
-    // Prefer cost from stdin (Claude Code provides it)
-    if let Some(cost_info) = &ctx.stdin_data.cost {
-        if let Some(cost_usd) = cost_info.total_cost_usd {
-            return c(MAGENTA, &format_cost(cost_usd));
+    // Progressive fit - 6 levels
+    let parts = vec![
+        build_full(&model, git_branch, &dirty, dir, msg_count, cost.as_deref()),
+        build_without_cost(&model, git_branch, &dirty, dir, msg_count),
+        build_minimal(&model, git_branch, &dirty, msg_count),
+        build_core(&model, git_branch, &dirty),
+        build_model_only(&model),
+        build_super_compact(&model),
+    ];
+
+    for part in parts {
+        if strip_ansi(&part).len() <= width {
+            return part;
         }
     }
 
-    // Fallback: calculate from transcript stats
-    if let Some(stats) = &ctx.stats {
-        let model_id = ctx.stdin_data.model_id();
-        let usage = TokenUsage {
-            input_tokens: stats.total_input,
-            output_tokens: stats.total_output,
-            cache_creation_input_tokens: None,
-            cache_read_input_tokens: None,
+    String::new()
+}
+
+fn shorten_model(name: &str) -> String {
+    name.replace("Claude ", "")
+        .replace(" 4.5", " 4")
+        .replace(" 3.5", " 3")
+}
+
+fn build_full(
+    model: &Option<String>,
+    git_branch: Option<&str>,
+    dirty: &str,
+    dir: Option<&str>,
+    msg_count: Option<usize>,
+    cost: Option<&str>,
+) -> String {
+    let mut parts = vec![];
+
+    if let Some(m) = model {
+        parts.push(format!("{BRIGHT_YELLOW}[{}]{RESET}", m));
+    }
+
+    if let Some(branch) = git_branch {
+        let dirty_display = if !dirty.is_empty() {
+            format!(" {BRIGHT_YELLOW}{}{RESET}", dirty)
+        } else {
+            String::new()
         };
-        let cost = calculate_cost(model_id, &usage);
-        c(MAGENTA, &format_cost(cost))
+        parts.push(format!("🌿 {BRIGHT_GREEN}{}{RESET}{}", branch, dirty_display));
+    }
+
+    if let Some(d) = dir {
+        parts.push(format!("📁 {BRIGHT_CYAN}{}{RESET}", d));
+    }
+
+    if let Some(count) = msg_count {
+        parts.push(format!("💬 {BRIGHT_CYAN}{}{RESET}", count));
+    }
+
+    if let Some(c) = cost {
+        let cost_val = c.trim_start_matches('$').parse::<f64>().unwrap_or(0.0);
+        let color = if cost_val > 10.0 { BRIGHT_YELLOW } else { BRIGHT_WHITE };
+        parts.push(format!("💰 {}{}{RESET}", color, c));
+    }
+
+    parts.join(" | ")
+}
+
+fn build_without_cost(
+    model: &Option<String>,
+    git_branch: Option<&str>,
+    dirty: &str,
+    dir: Option<&str>,
+    msg_count: Option<usize>,
+) -> String {
+    let mut parts = vec![];
+
+    if let Some(m) = model {
+        parts.push(format!("{BRIGHT_YELLOW}[{}]{RESET}", m));
+    }
+
+    if let Some(branch) = git_branch {
+        let dirty_display = if !dirty.is_empty() {
+            format!(" {BRIGHT_YELLOW}{}{RESET}", dirty)
+        } else {
+            String::new()
+        };
+        parts.push(format!("🌿 {BRIGHT_GREEN}{}{RESET}{}", branch, dirty_display));
+    }
+
+    if let Some(d) = dir {
+        parts.push(format!("📁 {BRIGHT_CYAN}{}{RESET}", d));
+    }
+
+    if let Some(count) = msg_count {
+        parts.push(format!("💬 {BRIGHT_CYAN}{}{RESET}", count));
+    }
+
+    parts.join(" | ")
+}
+
+fn build_minimal(
+    model: &Option<String>,
+    git_branch: Option<&str>,
+    dirty: &str,
+    msg_count: Option<usize>,
+) -> String {
+    let mut parts = vec![];
+
+    if let Some(m) = model {
+        parts.push(format!("{BRIGHT_YELLOW}[{}]{RESET}", m));
+    }
+
+    if let Some(branch) = git_branch {
+        let dirty_display = if !dirty.is_empty() {
+            format!(" {BRIGHT_YELLOW}{}{RESET}", dirty)
+        } else {
+            String::new()
+        };
+        parts.push(format!("🌿 {BRIGHT_GREEN}{}{RESET}{}", branch, dirty_display));
+    }
+
+    if let Some(count) = msg_count {
+        parts.push(format!("💬 {BRIGHT_CYAN}{}{RESET}", count));
+    }
+
+    parts.join(" | ")
+}
+
+fn build_core(
+    model: &Option<String>,
+    git_branch: Option<&str>,
+    dirty: &str,
+) -> String {
+    let mut parts = vec![];
+
+    if let Some(m) = model {
+        parts.push(format!("{BRIGHT_YELLOW}[{}]{RESET}", m));
+    }
+
+    if let Some(branch) = git_branch {
+        let dirty_display = if !dirty.is_empty() {
+            format!(" {BRIGHT_YELLOW}{}{RESET}", dirty)
+        } else {
+            String::new()
+        };
+        parts.push(format!("🌿 {BRIGHT_GREEN}{}{RESET}{}", branch, dirty_display));
+    }
+
+    parts.join(" | ")
+}
+
+fn build_model_only(model: &Option<String>) -> String {
+    if let Some(m) = model {
+        format!("{BRIGHT_YELLOW}[{}]{RESET}", m)
     } else {
         String::new()
     }
 }
 
-fn shorten_model(model: &str) -> &str {
-    model.split('-').next().unwrap_or(model)
+fn build_super_compact(model: &Option<String>) -> String {
+    if let Some(m) = model {
+        let first_char = m.chars().next().unwrap_or('M');
+        format!("{BRIGHT_YELLOW}[{}]{RESET}", first_char)
+    } else {
+        String::new()
+    }
 }
