@@ -5,7 +5,8 @@ use crate::colors::*;
 
 pub fn render(ctx: &DisplayContext, _width: usize) -> String {
     if let Some(stats) = &ctx.stats {
-        let sparkline = render_sparkline(&stats.burn_timeline);
+        let sparkline_width = stats.burn_timeline.len().min(20);
+        let sparkline = render_sparkline(&stats.burn_timeline, sparkline_width);
         let total: u64 = stats.burn_timeline.iter().sum();
         let rate = format_tokens(total / 20);
 
