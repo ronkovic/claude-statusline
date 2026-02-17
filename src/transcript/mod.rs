@@ -9,8 +9,6 @@ pub mod blocks;
 pub mod stats;
 pub mod burn;
 
-use crate::tokens::TokenUsage;
-
 #[derive(Debug, Clone)]
 pub struct SessionStats {
     pub total_input: u64,
@@ -23,6 +21,18 @@ pub struct SessionStats {
 }
 
 pub fn load_and_analyze() -> crate::error::Result<Option<SessionStats>> {
-    // Stub: agent-transcript implements full pipeline
-    Ok(None)
+    let files = finder::find_recent_transcripts()?;
+
+    let mut all_messages = Vec::new();
+    for file in files {
+        let lines = reader::read_transcript_lines(&file)?;
+        for line in lines {
+            if let Some(msg) = message::parse_message(&line) {
+                all_messages.push(msg);
+            }
+        }
+    }
+
+    let messages = dedup::deduplicate(all_messages);
+    Ok(stats::calculate_stats(&messages))
 }
