@@ -20,8 +20,16 @@ pub struct SessionStats {
     pub burn_timeline: Vec<u64>,
 }
 
-pub fn load_and_analyze() -> crate::error::Result<Option<SessionStats>> {
-    let files = finder::find_recent_transcripts()?;
+pub fn load_and_analyze(transcript_path: Option<&str>) -> crate::error::Result<Option<SessionStats>> {
+    use std::path::PathBuf;
+
+    let files = if let Some(path) = transcript_path {
+        // Use explicit transcript path from stdin
+        vec![PathBuf::from(path)]
+    } else {
+        // Fallback to finder
+        finder::find_recent_transcripts()?
+    };
 
     let mut all_messages = Vec::new();
     for file in files {

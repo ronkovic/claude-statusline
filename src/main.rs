@@ -42,10 +42,19 @@ fn show_schedule() -> Result<()> {
 
 fn show_status() -> Result<()> {
     let stdin_data = input::StdinData::read()?;
-    let stats = transcript::load_and_analyze()?;
+
+    // Determine transcript path: prefer explicit transcript_path, fallback to finder
+    let transcript_path = stdin_data.transcript_path.as_deref();
+    let stats = transcript::load_and_analyze(transcript_path)?;
+
     let terminal_width = terminal::get_terminal_width();
-    let git_branch = git::get_branch(stdin_data.cwd.as_deref());
-    let git_dirty = git::get_dirty_status(stdin_data.cwd.as_deref());
+
+    // Determine working directory: prefer cwd, fallback to workspace.current_dir
+    let working_dir = stdin_data.cwd.as_deref()
+        .or_else(|| stdin_data.workspace.as_ref().and_then(|w| w.current_dir.as_deref()));
+
+    let git_branch = git::get_branch(working_dir);
+    let git_dirty = git::get_dirty_status(working_dir);
 
     let ctx = display::DisplayContext::new(
         stdin_data,
@@ -63,7 +72,7 @@ fn show_status() -> Result<()> {
 
 fn select_display_mode(ctx: &display::DisplayContext) -> String {
     // Agent teams mode takes priority
-    if ctx.stdin_data.has_agent_teammate == Some(true) {
+    if ctx.stdin_data.agent.is_some() {
         return display::agent::render(ctx);
     }
 

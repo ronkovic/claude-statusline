@@ -4,7 +4,7 @@ use crate::colors::*;
 use crate::tokens::{calculate_cost, TokenUsage};
 
 pub fn render(ctx: &DisplayContext, width: usize) -> String {
-    let model = ctx.stdin_data.model.as_deref().unwrap_or("unknown");
+    let model = ctx.stdin_data.model_display();
     let git = format_git(ctx);
     let dir = format_dir(ctx);
     let msgs = format_messages(ctx);
@@ -42,7 +42,10 @@ fn format_git(ctx: &DisplayContext) -> String {
 }
 
 fn format_dir(ctx: &DisplayContext) -> String {
-    ctx.stdin_data.cwd.as_ref().map(|cwd| {
+    let dir = ctx.stdin_data.cwd.as_deref()
+        .or_else(|| ctx.stdin_data.workspace.as_ref().and_then(|w| w.current_dir.as_deref()));
+
+    dir.map(|cwd| {
         let short = cwd.split('/').last().unwrap_or(cwd);
         c(BLUE, short)
     }).unwrap_or_default()
@@ -57,15 +60,23 @@ fn format_messages(ctx: &DisplayContext) -> String {
 }
 
 fn format_cost_info(ctx: &DisplayContext) -> String {
+    // Prefer cost from stdin (Claude Code provides it)
+    if let Some(cost_info) = &ctx.stdin_data.cost {
+        if let Some(cost_usd) = cost_info.total_cost_usd {
+            return c(MAGENTA, &format_cost(cost_usd));
+        }
+    }
+
+    // Fallback: calculate from transcript stats
     if let Some(stats) = &ctx.stats {
-        let model = ctx.stdin_data.model.as_deref().unwrap_or("sonnet");
+        let model_id = ctx.stdin_data.model_id();
         let usage = TokenUsage {
             input_tokens: stats.total_input,
             output_tokens: stats.total_output,
             cache_creation_input_tokens: None,
             cache_read_input_tokens: None,
         };
-        let cost = calculate_cost(model, &usage);
+        let cost = calculate_cost(model_id, &usage);
         c(MAGENTA, &format_cost(cost))
     } else {
         String::new()
