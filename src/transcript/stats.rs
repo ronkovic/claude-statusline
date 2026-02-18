@@ -36,6 +36,11 @@ pub fn calculate_stats(messages: &[TranscriptMessage]) -> Option<SessionStats> {
 
     let burn_timeline = generate_burn_timeline(messages);
 
+    // Calculate duration_seconds
+    use chrono::Local;
+    let now = Local::now();
+    let duration_seconds = (now - current_block.start).num_seconds();
+
     Some(SessionStats {
         total_input,
         total_output,
@@ -46,6 +51,7 @@ pub fn calculate_stats(messages: &[TranscriptMessage]) -> Option<SessionStats> {
         burn_timeline,
         total_cache_creation,
         total_cache_read,
+        duration_seconds,
     })
 }
 

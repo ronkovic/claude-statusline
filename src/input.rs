@@ -12,6 +12,9 @@ pub struct StdinData {
     pub cost: Option<CostInfo>,
     pub workspace: Option<WorkspaceInfo>,
     pub agent: Option<AgentInfo>,
+    pub message_count: Option<usize>,
+    pub session_stats: Option<SessionStatsInput>,
+    pub burn_timeline: Option<Vec<u64>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -54,6 +57,20 @@ pub struct WorkspaceInfo {
 #[derive(Debug, Deserialize)]
 pub struct AgentInfo {
     pub name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SessionStatsInput {
+    pub message_count: Option<usize>,
+    pub total_input_tokens: Option<u64>,
+    pub total_output_tokens: Option<u64>,
+    pub block_count: Option<usize>,
+    pub block_start: Option<String>,
+    pub block_end: Option<String>,
+    pub burn_timeline: Option<Vec<u64>>,
+    pub total_cache_creation: Option<u64>,
+    pub total_cache_read: Option<u64>,
+    pub duration_seconds: Option<i64>,
 }
 
 impl StdinData {

@@ -45,7 +45,14 @@ fn show_status() -> Result<()> {
 
     // Determine transcript path: prefer explicit transcript_path, fallback to finder
     let transcript_path = stdin_data.transcript_path.as_deref();
-    let stats = transcript::load_and_analyze(transcript_path)?;
+
+    // Load stats from transcript or JSON
+    let stats = if let Some(session_stats) = &stdin_data.session_stats {
+        // Convert SessionStatsInput to SessionStats
+        convert_session_stats(session_stats)
+    } else {
+        transcript::load_and_analyze(transcript_path)?
+    };
 
     let terminal_width = terminal::get_terminal_width();
 
@@ -68,6 +75,31 @@ fn show_status() -> Result<()> {
     print!("{}", output);
 
     Ok(())
+}
+
+fn convert_session_stats(input: &input::SessionStatsInput) -> Option<transcript::SessionStats> {
+    use chrono::{DateTime, Local};
+
+    let block_start = input.block_start.as_ref()
+        .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+        .map(|dt| dt.with_timezone(&Local));
+
+    let block_end = input.block_end.as_ref()
+        .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+        .map(|dt| dt.with_timezone(&Local));
+
+    Some(transcript::SessionStats {
+        message_count: input.message_count.unwrap_or(0),
+        total_input: input.total_input_tokens.unwrap_or(0),
+        total_output: input.total_output_tokens.unwrap_or(0),
+        block_count: input.block_count.unwrap_or(0),
+        block_start,
+        block_end,
+        burn_timeline: input.burn_timeline.clone().unwrap_or_default(),
+        total_cache_creation: input.total_cache_creation.unwrap_or(0),
+        total_cache_read: input.total_cache_read.unwrap_or(0),
+        duration_seconds: input.duration_seconds.unwrap_or(0),
+    })
 }
 
 fn select_display_mode(ctx: &display::DisplayContext) -> String {

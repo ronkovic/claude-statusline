@@ -20,6 +20,7 @@ pub struct SessionStats {
     pub burn_timeline: Vec<u64>,
     pub total_cache_creation: u64,
     pub total_cache_read: u64,
+    pub duration_seconds: i64,
 }
 
 pub fn load_and_analyze(transcript_path: Option<&str>) -> crate::error::Result<Option<SessionStats>> {
