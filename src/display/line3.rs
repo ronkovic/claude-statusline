@@ -81,6 +81,7 @@ mod tests {
             burn_timeline: vec![],
             total_cache_creation: 0,
             total_cache_read: 0,
+            duration_seconds: 3600,
         };
 
         let ctx = DisplayContext::new(
@@ -122,6 +123,7 @@ mod tests {
             burn_timeline: vec![],
             total_cache_creation: 0,
             total_cache_read: 0,
+            duration_seconds: 0,
         };
 
         let ctx = DisplayContext::new(

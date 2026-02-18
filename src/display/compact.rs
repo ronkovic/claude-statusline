@@ -58,6 +58,7 @@ mod tests {
             burn_timeline: vec![100; 20],
             total_cache_creation: 5000,
             total_cache_read: 2000,
+            duration_seconds: 7200,
         };
 
         let stdin_data = StdinData {
@@ -88,6 +89,9 @@ mod tests {
             transcript_path: None,
             workspace: None,
             agent: None,
+            message_count: None,
+            session_stats: None,
+            burn_timeline: None,
         };
 
         let ctx = DisplayContext::new(
